@@ -49,6 +49,9 @@ class Crossformer(nn.Module):
         self.decoder = Decoder(seg_len, e_layers + 1, d_model, n_heads, d_ff, dropout, \
                                     out_seg_num = (self.pad_out_len // seg_len), factor = factor)
         
+        self.preout = nn.Linear(data_dim, 20)
+        self.out = nn.Linear(20, 3)
+        
     def forward(self, x_seq):
         if (self.baseline):
             base = x_seq.mean(dim = 1, keepdim = True)
@@ -65,6 +68,7 @@ class Crossformer(nn.Module):
         enc_out = self.encoder(x_seq)
         dec_in = repeat(self.dec_pos_embedding, 'b ts_d l d -> (repeat b) ts_d l d', repeat = batch_size)
         predict_y = self.decoder(dec_in, enc_out)
-
-
+        predict_y = self.preout(predict_y)
+        predict_y = self.out(predict_y)
+        predict_y = predict_y.reshape(batch_size, 3, -1)
         return base + predict_y[:, :self.out_len, :]

@@ -47,9 +47,9 @@ else:
 )'''
 
 
-def pipeline(datafile):
-    train_dataset = Create_Dataset(datafile=datafile, window_size=hp.lookback, pred_size=hp.pred_size, split=hp.split, mode='train')
-    test_dataset = Create_Dataset(datafile=datafile, window_size=hp.lookback, pred_size=hp.pred_size, split=hp.split, mode='test')
+def pipeline(datafile, scaler):
+    train_dataset = Create_Dataset(datafile=datafile, window_size=hp.lookback, pred_size=hp.pred_size, split=hp.split, scaler=scaler, mode='train')
+    test_dataset = Create_Dataset(datafile=datafile, window_size=hp.lookback, pred_size=hp.pred_size, split=hp.split, scaler=scaler, mode='test')
 
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=hp.batch_size, shuffle=True, num_workers=hp.num_workers,pin_memory=True,  drop_last=True)
     test_dataloader = DataLoader(dataset=test_dataset, batch_size=hp.batch_size, shuffle=False, num_workers=hp.num_workers,pin_memory=True)
@@ -82,12 +82,10 @@ def main():
                 with open(os.path.join(os.getcwd(), datafile), 'r') as f:
                     print(datafile)
                     df = pre_process(datafile=datafile)
-                    df = scaler.fit_transform(df)
                     if len(df) >= 1000:
-                        train_dataloader, test_dataloader = pipeline(df)
+                        train_dataloader, test_dataloader = pipeline(df, scaler)
                         for i, (x,y) in enumerate(train_dataloader):
                             x, y = x.to(DEVICE), y.to(DEVICE)
-                            print(x.shape, y.shape)
                             with amp.autocast(dtype=torch.float16):
                                 y_pred = net(x)
                                 loss = loss_function(y_pred, y)
@@ -99,15 +97,15 @@ def main():
                         wandb.log({'Loss': loss})
                         wandb.log({'Epoch': epochs})
 
- 
-                pre = y_pred.cpu().detach().numpy()[0,:,0]
-                ys = y.cpu().detach().numpy()[0,:,0]
-                fig, ax = plt.subplots()
-                ax.plot(pre, label='predictions')
-                ax.plot(ys, label ='actual')
-                plt.legend()
-                wandb.log({'train plot': wandb.Image(fig)})
-                plt.close()
+                if len(df) >= 1000:
+                    pre = y_pred.cpu().detach().numpy()[0,:,0]
+                    ys = y.cpu().detach().numpy()[0,:,0]
+                    fig, ax = plt.subplots()
+                    ax.plot(pre, label='predictions')
+                    ax.plot(ys, label ='actual')
+                    plt.legend()
+                    wandb.log({'train plot': wandb.Image(fig)})
+                    plt.close()
                 #test(net=net, dataloader=test_dataloader, optimizer=optimizer, loss_function=loss_function)
         scheduler.step(loss.mean())
 def test(net, dataloader, optimizer, loss_function):
